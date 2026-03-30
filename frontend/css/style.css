@@ -1,0 +1,301 @@
+:root {
+    /* 深色調暖色系配色 */
+    --bg-body: #1A1A1D;
+    /*極深巧克力灰 */
+    --bg-card: #252529;
+    /* 稍微淺一點的深色區塊 */
+    --bg-input: #2C2C31;
+
+    --accent-warm: #FF9F67;
+    /* 核心暖橘色 */
+    --accent-glow: rgba(255, 159, 103, 0.3);
+
+    --text-primary: #F5F5DC;
+    /* 米白文字，不刺眼 */
+    --text-secondary: #A0A0A0;
+    /* 灰色輔助文字 */
+
+    --bubble-user: #4A3B2F;
+    /* 使用者氣泡：深琥珀 */
+    --bubble-ai: #2C2C31;
+    /* AI 氣泡：深灰 */
+
+    --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.5);
+    --transition: all 0.3s ease;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* --- Grid 佈局設定 (依照用戶要求) --- */
+.parent {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(10, 1fr);
+    height: 100vh;
+    gap: 15px;
+    padding: 20px;
+}
+
+/* --- Div 4: 標題與狀態 (上) --- */
+.div4 {
+    grid-area: 1 / 1 / 2 / 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px;
+    background: var(--bg-card);
+    border-radius: 20px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid #333;
+}
+
+.status-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* 靜態時的點點 */
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #555;
+    /* 預設灰色 */
+    transition: var(--transition);
+}
+
+/* 錄音中狀態 */
+.recording .status-dot {
+    background-color: var(--accent-warm);
+    box-shadow: 0 0 10px var(--accent-warm);
+}
+
+.recording #status-text {
+    color: var(--accent-warm);
+}
+
+/* --- CSS 音波動畫 (預設隱藏) --- */
+.waveform {
+    display: none;
+    /* 初始隱藏 */
+    align-items: center;
+    gap: 2px;
+    height: 26px;
+}
+
+.recording .waveform {
+    display: flex;
+    /* 通話時顯示 */
+}
+
+.wave-bar {
+    width: 4px;
+    height: 100%;
+    background-color: var(--accent-warm);
+    border-radius: 999px;
+    transform: scaleY(0.15);
+    transform-origin: center;
+    transition: transform 70ms linear;
+}
+
+
+/* --- Div 1: 主對話區 (中) --- */
+.div1 {
+    grid-area: 2 / 1 / 10 / 5;
+    background: var(--bg-card);
+    border-radius: 25px;
+    box-shadow: var(--shadow-card);
+    padding: 30px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    border: 1px solid #333;
+}
+
+.bubble {
+    max-width: 75%;
+    padding: 15px 20px;
+    line-height: 1.6;
+    border-radius: 18px;
+    font-size: 0.95rem;
+}
+
+.ai-bubble {
+    align-self: flex-start;
+    background-color: var(--bubble-ai);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+    border: 1px solid #3a3a3a;
+}
+
+.user-bubble {
+    align-self: flex-end;
+    background-color: var(--bubble-user);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+/* --- Div 2: 控制按鈕 (下) --- */
+.div2 {
+    grid-area: 10 / 1 / 11 / 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.btn {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+}
+
+/* 通話按鈕 */
+.btn-call {
+    background-color: var(--accent-warm);
+    color: #1A1A1D;
+    padding: 16px 45px;
+    font-size: 1.1rem;
+    box-shadow: 0 4px 15px rgba(255, 159, 103, 0.4);
+}
+
+.btn-call:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 159, 103, 0.6);
+}
+
+/* 通話中狀態的按鈕 (變成紅色系) */
+.btn-call.in-call {
+    background-color: #ff5252;
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 82, 82, 0.4);
+}
+
+.btn-secondary {
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    border: 1px solid #3a3a3a;
+}
+
+.btn-secondary:hover {
+    background: #333;
+    color: var(--text-primary);
+}
+
+.btn-secondary.muted {
+    background-color: #444;
+    color: #ff5252;
+    border-color: #555;
+    transform: scale(1.1);
+}
+
+/* --- Div 3: 實時轉錄 (右) --- */
+.div3 {
+    grid-area: 1 / 5 / 11 / 6; 
+    background: #141416;
+    /* 比背景更深，像側邊欄 */
+    border-radius: 25px;
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #222;
+}
+
+.transcript-header {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+}
+
+.transcript-content {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.8;
+    overflow-y: auto;
+}
+
+.transcript-line {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #222;
+}
+
+.transcript-line strong {
+    color: var(--text-primary);
+    margin-right: 5px;
+}
+
+.ai-bubble.thinking {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background-color: var(--bubble-ai);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+    border: 1px solid #3a3a3a;
+}
+
+.ai-bubble.thinking .dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--text-secondary);
+    border-radius: 50%;
+    animation: jump 1s infinite;
+}
+
+.ai-bubble.thinking .dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.ai-bubble.thinking .dot:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes jump {
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+/* 隱藏滾動條但保持功能 (webkit) */
+::-webkit-scrollbar {
+    width: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 10px;
+}

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>全雙工語音通話-demo</title>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            rel="stylesheet">
+        <link rel="stylesheet" href="css/style.css">
+    </head>
+    <body>
+        <div class="parent">
+            <header class="div4" id="header-status">
+                <h2>Warm Voice AI</h2>
+                <div class="status-container">
+                    <div class="waveform">
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                    </div>
+                    <div class="status-dot"></div>
+                    <span id="status-text">準備就緒</span>
+                </div>
+            </header>
+
+            <main class="div1">
+                <div
+                    class="bubble ai-bubble">你好！我是你的暖心助手。今天有什麼我可以幫你的嗎？無論是想聊天還是需要建議，我都在這裡。</div>
+                <div class="bubble user-bubble">我想規劃一個放鬆的週末旅行，有什麼建議嗎？</div>
+                <div
+                    class="bubble ai-bubble">聽起來很棒！考慮到現在的季節，我建議可以去山上的溫泉旅館，或者去海邊的慢節奏小鎮走走。您可以告訴我您偏好哪一種，我可以提供更詳細的行程。</div>
+                <div
+                    class="bubble user-bubble">我想去海岸線逛逛</div>
+                <div
+                    class="bubble ai-bubble thinking">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </main>
+
+            <footer class="div2">
+                <button class="btn btn-secondary" aria-label="設定" title="設定"><i
+                        class="fas fa-cog"></i></button>
+                <button class="btn btn-call" id="call-btn"
+                    onclick="toggleCall()" aria-label="開始通話" title="開始通話"><i
+                        class="fas fa-phone"></i></button>
+                <button class="btn btn-secondary" id="mute-btn"
+                    onclick="toggleMute()" aria-label="靜音" title="靜音"><i
+                        class="fas fa-microphone-slash"></i></button>
+            </footer>
+
+            <aside class="div3">
+                <div class="transcript-header">
+                    <span>實時轉錄</span>
+                    <span style="color: green; font-size: 0.7rem;">● LIVE</span>
+                </div>
+                <div class="transcript-content">
+                    <div class="transcript-line"><strong>User:</strong>
+                        <span class="text" id="transcript-text"></span></div>
+                </div>
+            </aside>
+        </div>
+        <script src="js/recorder.js"></script>
+        <script src="js/all.js"></script>
+    </body>
+</html>

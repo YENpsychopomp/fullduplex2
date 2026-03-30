@@ -1,0 +1,7 @@
+backend/recorder/
+backend/.env
+backend/__pycache__/
+backend/voice_temp.mp3
+backend/voice_temp.wav
+backend/qwan_models_cache/
+sequenceDiagram.mmd
