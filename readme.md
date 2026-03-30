@@ -96,4 +96,8 @@ ASR 服務在 [backend/qwan_example.py](backend/qwan_example.py)。
 4. ASR 回傳文字 -> 後端轉送前端
 5. 前端更新 UI 的即時轉錄
 6. 關閉 WebSocket -> 後端存檔音訊
-# full-duplex2
+
+## 後續開發
+- 新增VAD
+- 新增LLM回覆
+- 新增TTS功能
