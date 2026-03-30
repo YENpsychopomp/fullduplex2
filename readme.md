@@ -14,6 +14,10 @@
 - **結束通話**：前端斷線後，後端會把收集到的 PCM 存在 `backend/recorder/`。
 
 ## 前端如何使用
+- 在backend目錄下輸入
+```bash
+python main.py
+```
 
 前端的主要流程在 [frontend/js/all.js](frontend/js/all.js) 和 [frontend/js/recorder.js](frontend/js/recorder.js)。
 
