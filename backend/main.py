@@ -19,11 +19,22 @@ import base64
 import websockets
 
 from sessions_manager import SessionManager, SessionData, AudioFormat
+from vad import SmartStreamingVAD
 
 load_dotenv()
 app = FastAPI(title="full-duplex2")
 logger = logging.getLogger("uvicorn.error")
 session_manager = SessionManager()
+PAUSE_FINISH_REASON = "pause_detected"
+ASR_WS_CONNECT_TIMEOUT_SEC = 3
+
+
+async def _send_finish_stream(asr_ws, reason: str):
+    await asr_ws.send(json.dumps({
+        "type": "request.finish_stream",
+        "reason": reason,
+    }))
+    logger.info("已送出 ASR finish 指令，reason=%s", reason)
 
 class _HTTPOnlyStaticFiles:
     def __init__(self, static_app: StaticFiles):
@@ -42,79 +53,124 @@ class _HTTPOnlyStaticFiles:
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    logger.info("前端 WebSocket 已連線")
     current_session_id = None
     asr_task = None # 用來追蹤 ASR 接收任務
+    asr_ws = None
+    pause_vad = SmartStreamingVAD(sample_rate=24000)
     
     # 🌟 ASR Server 的 WebSocket 地址 (指向你的 WSL2)
     WS_ASR_URL = "ws://127.0.0.1:8001/ws/asr"
     
-    try:
-        # 🌟 建立與 ASR 伺服器的連線
-        async with websockets.connect(WS_ASR_URL) as asr_ws:
-            logger.info("成功連線到 ASR 伺服器！")
-            
-            # 🌟 定義一個背景任務：專門負責「不間斷地接收 ASR 回傳的文字」，並轉發給前端
-            async def receive_asr_text():
-                try:
-                    while True:
-                        asr_response_str = await asr_ws.recv()
-                        asr_result = json.loads(asr_response_str)
-                        
-                        # 轉發 ASR 結果給前端 (讓前端顯示)
-                        await websocket.send_text(json.dumps({
-                            "type": "response.asr_text",
-                            "text": asr_result.get("text", ""),
-                            "language": asr_result.get("language", ""),
-                            "status": asr_result.get("status", "")
-                        }))
-                except websockets.exceptions.ConnectionClosed:
-                    logger.warning("ASR 伺服器連線已關閉")
-                except asyncio.CancelledError:
-                    pass # 任務被正常取消
-                except Exception as e:
-                    logger.error(f"接收 ASR 文字發生錯誤: {e}")
+    async def _close_asr_connection(reason: str):
+        nonlocal asr_task, asr_ws
+        if asr_task:
+            asr_task.cancel()
+            logger.info("ASR 接收背景任務已取消，reason=%s", reason)
+            asr_task = None
+        if asr_ws:
+            try:
+                await asr_ws.close()
+            except Exception:
+                pass
+            asr_ws = None
+            logger.info("ASR 連線已關閉，reason=%s", reason)
 
-            # 啟動背景任務
-            asr_task = asyncio.create_task(receive_asr_text())
-
-            # 這是原本負責接收前端訊息的主迴圈
+    async def _receive_asr_text(active_asr_ws):
+        nonlocal asr_ws
+        try:
             while True:
-                # 1. 接收訊息 (前端掛斷時，這裡會直接觸發 WebSocketDisconnect 異常跳出迴圈)
-                raw_msg = await websocket.receive()
+                asr_response_str = await active_asr_ws.recv()
+                asr_result = json.loads(asr_response_str)
+                status = asr_result.get("status", "")
+                asr_text = asr_result.get("text", "")
+                asr_language = asr_result.get("language", "")
+                logger.info("ASR 回傳 status=%s, language=%s, text=%s", status, asr_language, asr_text)
 
-                if raw_msg.get("type") == "websocket.disconnect":
-                    logger.info("收到前端斷線訊號，準備結束通話...")
-                    raise WebSocketDisconnect(code=raw_msg.get("code", 1000))
-                
-                # 2. 安全處理 JSON 訊息
-                if "text" in raw_msg and raw_msg["text"]:
-                    try:
-                        data = json.loads(raw_msg["text"])
-                    except json.JSONDecodeError:
-                        logger.error("收到的不是有效的 JSON 格式")
-                        continue # 解析失敗就跳過這次，繼續等下一筆
-                    
-                    # ==== 處理各種 request 指令 ====
-                    if data.get("type") == "request.ping":
-                        await websocket.send_text(json.dumps({
-                            "type": "response.ping",
-                            "msg": "pong"
-                        }))
-                        
-                    elif data.get("type") == "request.session":
-                        sid = session_manager.create_session()
-                        current_session_id = sid
-                        await websocket.send_text(json.dumps({
-                            "type": "response.session",
-                            "session_id": sid,
-                            "msg": f"Session created with ID: {sid}"
-                        }))
-                        
-                    elif data.get("type") == "request.set_system_prompt":
-                        sid = data.get("session_id")
-                        session_info = session_manager.get_session_info(sid)
-                        if session_info:
-                            session_info.system_prompt = data.get("system_prompt")
+                await websocket.send_text(json.dumps({
+                    "type": "response.asr_text",
+                    "text": asr_text,
+                    "language": asr_language,
+                    "status": status
+                }))
+        except websockets.exceptions.ConnectionClosed:
+            logger.warning("ASR 伺服器連線已關閉")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.exception("接收 ASR 文字發生錯誤: %s", e)
+        finally:
+            if asr_ws is active_asr_ws:
+                asr_ws = None
+
+    async def _ensure_asr_connection() -> bool:
+        nonlocal asr_ws, asr_task
+        if asr_ws and not asr_ws.closed:
+            return True
+
+        try:
+            asr_ws = await asyncio.wait_for(
+                websockets.connect(WS_ASR_URL),
+                timeout=ASR_WS_CONNECT_TIMEOUT_SEC,
+            )
+            logger.info("成功連線到 ASR 伺服器")
+            asr_task = asyncio.create_task(_receive_asr_text(asr_ws))
+            logger.info("ASR 接收背景任務已啟動")
+            return True
+        except Exception as e:
+            asr_ws = None
+            logger.warning("ASR 連線失敗，稍後重試: %s", e)
+            return False
+
+    try:
+        # 啟動時先嘗試連一次，不成功也不讓整個前端流程中斷
+        await _ensure_asr_connection()
+
+        # 主迴圈：永遠以處理前端訊息為主
+        while True:
+            raw_msg = await websocket.receive()
+            logger.info("收到前端訊息 type=%s", raw_msg.get("type"))
+
+            if raw_msg.get("type") == "websocket.disconnect":
+                logger.info("收到前端斷線訊號，準備結束通話...")
+                raise WebSocketDisconnect(code=raw_msg.get("code", 1000))
+
+            # 2. 安全處理 JSON 訊息
+            if "text" in raw_msg and raw_msg["text"]:
+                try:
+                    data = json.loads(raw_msg["text"])
+                    logger.info("收到前端 JSON 指令 type=%s", data.get("type"))
+                except json.JSONDecodeError:
+                    logger.error("收到的不是有效的 JSON 格式")
+                    continue # 解析失敗就跳過這次，繼續等下一筆
+
+                # ==== 處理各種 request 指令 ====
+                if data.get("type") == "request.ping":
+                    logger.info("處理 request.ping")
+                    await websocket.send_text(json.dumps({
+                        "type": "response.ping",
+                        "msg": "pong"
+                    }))
+
+                elif data.get("type") == "request.session":
+                    sid = session_manager.create_session()
+                    current_session_id = sid
+                    pause_vad.reset()
+                    logger.info("建立 session 成功 sid=%s", sid)
+                    await websocket.send_text(json.dumps({
+                        "type": "response.session",
+                        "session_id": sid,
+                        "msg": f"Session created with ID: {sid}"
+                    }))
+
+                elif data.get("type") == "request.set_system_prompt":
+                    sid = data.get("session_id")
+                    session_info = session_manager.get_session_info(sid)
+                    if session_info:
+                        session_info.system_prompt = data.get("system_prompt")
+                        logger.info("更新 system prompt sid=%s", sid)
+                    else:
+                        logger.info("set_system_prompt 找不到 session sid=%s", sid)
                             
                     # elif data.get("type") == "request.audio_data":
                     #     sid = data.get("session_id")
@@ -148,25 +204,38 @@ async def websocket_endpoint(websocket: WebSocket):
                     #             "msg": f"Session {sid} not found"
                     #         }))
                             
-                elif "bytes" in raw_msg and raw_msg["bytes"]:
-                    audio_bytes = raw_msg["bytes"]
-                    if current_session_id:
-                        session_info = session_manager.get_session_info(current_session_id)
-                        if session_info:
-                            session_info.audio_buffer += audio_bytes
+            elif "bytes" in raw_msg and raw_msg["bytes"]:
+                audio_bytes = raw_msg["bytes"]
+                logger.info("收到音訊 bytes=%d", len(audio_bytes))
+                if current_session_id:
+                    session_info = session_manager.get_session_info(current_session_id)
+                    if session_info:
+                        session_info.audio_buffer += audio_bytes
+                        logger.info("音訊已累加到 session sid=%s, total_bytes=%d", current_session_id, len(session_info.audio_buffer))
 
-                    await asr_ws.send(audio_bytes)
+                connected = await _ensure_asr_connection()
+                if connected and asr_ws:
+                    try:
+                        await asr_ws.send(audio_bytes)
+                        logger.info("音訊已轉送至 ASR")
 
-    except ConnectionRefusedError:
-        logger.error("無法連線到 ASR 伺服器！請確認 WSL2 中的 asr_server.py 是否已啟動。")
-        await websocket.close(code=1011, reason="ASR Server Unavailable")
+                        if pause_vad.process_pcm16(audio_bytes):
+                            logger.info("VAD 偵測到停頓，準備要求 ASR finish")
+                            await _send_finish_stream(asr_ws, PAUSE_FINISH_REASON)
+                    except websockets.exceptions.ConnectionClosed:
+                        logger.warning("送音訊到 ASR 失敗，連線已中斷，將在下個 chunk 重連")
+                        await _close_asr_connection("send_audio_connection_closed")
+                else:
+                    logger.info("ASR 暫不可用，僅保留音訊於 session buffer")
+            else:
+                logger.info("收到未處理訊息內容，略過")
+
     except WebSocketDisconnect:
         logger.info("前端掛斷了，準備執行存檔...")
     except Exception as e:
-        logger.error(f"WebSocket 發生未預期錯誤: {e}")
+        logger.exception("WebSocket 發生未預期錯誤: %s", e)
     finally:
-        if asr_task:
-            asr_task.cancel()
+        await _close_asr_connection("frontend_disconnected")
             
         if current_session_id:
             base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "recorder"))
@@ -178,6 +247,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.warning("錄音未儲存：原因可能是完全沒有收到音訊")
                 
             session_manager.close_session(current_session_id)
+            logger.info("session 已關閉 sid=%s", current_session_id)
 
 app.mount("/", _HTTPOnlyStaticFiles(StaticFiles(directory="frontend", html=True)), name="frontend")
 
